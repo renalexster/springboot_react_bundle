@@ -5,6 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -13,7 +14,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Map;
+
+import static com.example.service.utils.StringUtils.joinNonBlank;
+import static com.example.service.utils.StringUtils.trimToNull;
 
 /**
  * Populates {@link ExecutionContextImpl} from the Spring Security context for each request.
@@ -29,33 +32,47 @@ public class ExecutionContextFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull FilterChain filterChain)
             throws ServletException, IOException {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication instanceof JwtAuthenticationToken jwtAuth && authentication.isAuthenticated()) {
                 Jwt jwt = jwtAuth.getToken();
-                Map<String, Object> claims = jwt.getClaims();
-                String given = (String) claims.get("given_name");
-                String family = (String) claims.get("family_name");
-                String email = (String) claims.get("email");
-                String name;
-                Object nameObj = claims.get("name");
-                if (nameObj != null) {
-                    name = String.valueOf(nameObj);
-                } else if (given != null || family != null) {
-                    name = (given != null ? given : "") + (family != null ? (" " + family) : "");
-                } else if (email != null) {
-                    name = email;
-                } else {
-                    name = jwt.getSubject();
-                }
+                String given = jwt.getClaimAsString("given_name");
+                String family = jwt.getClaimAsString("family_name");
+                String email = jwt.getClaimAsString("email");
+                String name = resolveDisplayName(jwt, given, family, email);
                 User user = new User(name, email, given, family);
-                executionContext.set(user, jwt, request.getHeader("x-traceId"));
+                String traceId = request.getHeader("x-traceId"); // HTTP headers are case-insensitive
+
+                executionContext.set(user, jwt, traceId);
             }
             filterChain.doFilter(request, response);
         } finally {
             executionContext.clear();
         }
     }
+
+    private static String resolveDisplayName(Jwt jwt, String given, String family, String email) {
+        // 1) Explicit name claim
+        String name = trimToNull(jwt.getClaimAsString("name"));
+        if (name != null) return name;
+
+        // 2) Full name composed from given + family
+        String fullName = joinNonBlank(given, family);
+        if (fullName != null) return fullName;
+
+        // 3) Preferred username (common with some IdPs)
+        String preferred = trimToNull(jwt.getClaimAsString("preferred_username"));
+        if (preferred != null) return preferred;
+
+        // 4) Email
+        String emailTrim = trimToNull(email);
+        if (emailTrim != null) return emailTrim;
+
+        // 5) Fallback to subject
+        String sub = jwt.getSubject();
+        return sub != null ? sub : "";
+    }
+
 }
