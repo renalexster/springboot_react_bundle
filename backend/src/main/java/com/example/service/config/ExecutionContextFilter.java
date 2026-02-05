@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.MDC;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -44,12 +45,15 @@ public class ExecutionContextFilter extends OncePerRequestFilter {
                 String name = resolveDisplayName(jwt, given, family, email);
                 User user = new User(name, email, given, family);
                 String traceId = request.getHeader("x-traceId"); // HTTP headers are case-insensitive
-
+                if (traceId != null) {
+                    MDC.put("traceId", traceId);
+                }
                 executionContext.set(user, jwt, traceId);
             }
             filterChain.doFilter(request, response);
         } finally {
             executionContext.clear();
+            MDC.clear();
         }
     }
 
