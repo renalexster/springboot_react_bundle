@@ -2,7 +2,7 @@
 # Multi-stage build: use Gradle to build the JAR, then run it on a slim JRE image
 
 # 1) BUILD STAGE
-FROM gradle:8.7-jdk17-alpine AS backend-build
+FROM gradle:8.7-jdk17-jammy AS backend-build
 
 # Set workdir at the repo root to allow Gradle to resolve the multi-project build
 WORKDIR /workspace
@@ -21,7 +21,7 @@ RUN chmod +x ./gradlew \
     && ./gradlew :backend:bootJar -x test --no-daemon
 
 # 2) RUNTIME STAGE
-FROM eclipse-temurin:17-jre-alpine AS backend-runtime
+FROM eclipse-temurin:17-jre-jammy AS backend-runtime
 
 WORKDIR /app
 
