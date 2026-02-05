@@ -7,7 +7,8 @@ WORKDIR /app
 
 # Install deps first for better caching
 COPY package*.json ./
-RUN npm ci --no-audit --no-fund
+# Use npm ci when lockfile exists; fall back to npm install otherwise (common in small demos)
+RUN if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
 # Copy source
 COPY . .

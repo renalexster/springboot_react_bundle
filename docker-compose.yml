@@ -1,7 +1,13 @@
 version: "3.9"
 
+# For Raspberry Pi 4 (64-bit OS), set TARGET_PLATFORM=linux/arm64/v8
+# For 32-bit Pi OS, set TARGET_PLATFORM=linux/arm/v7
+# You can export it in your shell or put it into a .env file at the repo root.
+# Compose default here assumes a 64-bit Pi 4.
+
 services:
   backend:
+    platform: ${TARGET_PLATFORM:-linux/arm64/v8}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -13,12 +19,15 @@ services:
       - SERVER_PORT=8080
       # CORS is not required when UI proxies requests to /api on same origin, but you can still set it if needed
       - APP_CORS_ALLOWED_ORIGIN=${APP_CORS_ALLOWED_ORIGIN:-http://localhost}
+      # Tune JVM memory for Pi (override image default)
+      - JAVA_OPTS=${JAVA_OPTS:-"-XX:MaxRAMPercentage=60.0 -XX:+UseContainerSupport"}
     expose:
       - "8080"
     networks:
       - myboot-net
 
   ui:
+    platform: ${TARGET_PLATFORM:-linux/arm64/v8}
     build:
       context: ./ui
       dockerfile: Dockerfile
