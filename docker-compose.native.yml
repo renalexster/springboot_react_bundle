@@ -1,0 +1,52 @@
+version: "3.9"
+
+# GraalVM Native Image variant for reduced memory footprint
+# For Raspberry Pi 4 (64-bit OS), set TARGET_PLATFORM=linux/arm64/v8
+# For 32-bit Pi OS, set TARGET_PLATFORM=linux/arm/v7
+# Compose default here assumes a 64-bit Pi 4.
+
+services:
+  backend:
+    platform: ${TARGET_PLATFORM:-linux/arm64/v8}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.native
+    image: mybootproject-backend-native:local
+    environment:
+      # Optional: set your Google OAuth client id (also can be set in .env file as GOOGLE_OAUTH_CLIENT_ID=...)
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      # Backend port inside the container
+      - SERVER_PORT=8080
+      # CORS is not required when UI proxies requests to /api on same origin, but you can still set it if needed
+      - APP_CORS_ALLOWED_ORIGIN=${APP_CORS_ALLOWED_ORIGIN:-http://localhost}
+    expose:
+      - "8080"
+    networks:
+      - myboot-net
+    # Native images typically use much less memory
+    deploy:
+      resources:
+        limits:
+          memory: 256M  # Native image typically uses 50-150MB vs 300-500MB for JVM
+        reservations:
+          memory: 128M
+
+  ui:
+    platform: ${TARGET_PLATFORM:-linux/arm64/v8}
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+      args:
+        # Make the UI call same-origin /api, which nginx will proxy to the backend container
+        VITE_API_BASE_URL: "/api"
+    image: mybootproject-ui:local
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - myboot-net
+
+networks:
+  myboot-net:
+    driver: bridge

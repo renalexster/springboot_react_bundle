@@ -1,0 +1,43 @@
+# === Backend (Spring Boot Native Image) Dockerfile ===
+# Multi-stage build: use GraalVM to build native image, then run on minimal base
+
+# 1) BUILD STAGE
+FROM ghcr.io/graalvm/native-image-community:25-ol9 AS native-build
+
+# Install required build tools
+RUN microdnf install -y findutils
+
+# Set workdir at the repo root to allow Gradle to resolve the multi-project build
+WORKDIR /workspace
+
+# Copy Gradle wrapper and settings first for better layer caching
+COPY gradle gradle
+COPY gradlew gradlew
+COPY settings.gradle.kts settings.gradle.kts
+COPY build.gradle.kts build.gradle.kts
+
+# Copy the entire project (needed for :backend:nativeCompile)
+COPY . .
+
+# Build native image (this will take several minutes)
+RUN chmod +x ./gradlew \
+    && ./gradlew :backend:nativeCompile --no-daemon
+
+# 2) RUNTIME STAGE
+FROM ghcr.io/graalvm/jdk-community:25-ol9 AS native-runtime
+
+WORKDIR /app
+
+# Copy the built native executable
+# GraalVM Native Image plugin outputs to: backend/build/native/nativeCompile/
+COPY --from=native-build /workspace/backend/build/native/nativeCompile/mybootproject /app/mybootproject
+
+# Configure environment variables
+ENV SERVER_PORT=8080
+# CORS: default to same-origin via nginx proxy; can be overridden in docker-compose
+ENV APP_CORS_ALLOWED_ORIGIN=http://localhost:8080
+
+EXPOSE 8080
+
+# Native images don't need JAVA_OPTS - they have their own memory management
+ENTRYPOINT ["/app/mybootproject"]

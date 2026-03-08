@@ -2,6 +2,7 @@ plugins {
     java
     id("org.springframework.boot") version "4.0.2"
     id("io.spring.dependency-management") version "1.1.7"
+    id("org.graalvm.buildtools.native") version "0.10.4"
 }
 
 group = "com.example"
@@ -50,4 +51,34 @@ dependencyManagement {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+graalvmNative {
+    binaries {
+        named("main") {
+            imageName.set("mybootproject")
+            mainClass.set("com.example.service.MyBootProjectApplication")
+
+            buildArgs.add("--verbose")
+            buildArgs.add("-H:+ReportExceptionStackTraces")
+
+            // Optimize for memory
+            buildArgs.add("-Ob") // Quick build mode for faster compilation
+            buildArgs.add("--gc=G1") // G1 GC for better memory management
+
+            // Resource configuration
+            buildArgs.add("-H:ResourceConfigurationFiles=src/main/resources/META-INF/native-image/resource-config.json")
+
+            // Enable monitoring and management
+            buildArgs.add("--enable-monitoring=heapdump,jfr,jvmstat")
+        }
+
+        configureEach {
+            resources.autodetect()
+        }
+    }
+
+    metadataRepository {
+        enabled.set(true)
+    }
 }
